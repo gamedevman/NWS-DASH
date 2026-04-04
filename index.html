@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NWS Weather Dashboard</title>
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --panel: #0f1629;
+            --border: #1e2d4a;
+            --accent: #00c8ff;
+            --accent2: #0066ff;
+            --text: #cdd8f0;
+            --text-dim: #5a6a8a;
+            --font-display: 'Rajdhani', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
+            --extreme:    #ff2020;
+            --severe:     #ff6a00;
+            --moderate:   #ffd000;
+            --minor:      #00d4aa;
+            --unknown:    #5a6a8a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-display);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,200,255,0.015) 2px, rgba(0,200,255,0.015) 4px);
+            pointer-events: none;
+            z-index: 999;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 28px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(90deg, #0a0e1a 0%, #0d1530 100%);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            width: 36px; height: 36px;
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 12px rgba(0,200,255,0.3);
+        }
+        .logo h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #fff; }
+        .logo span { font-size: 0.7rem; color: var(--accent); letter-spacing: 3px; display: block; font-family: var(--font-mono); }
+        .header-right { display: flex; align-items: center; gap: 16px; }
+        .status-bar { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); transition: background 0.3s; }
+        .status-dot.live { background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: pulse 2s infinite; }
+        .status-dot.loading { background: var(--accent); animation: pulse 0.5s infinite; }
+        .status-dot.error { background: var(--extreme); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .btn {
+            font-family: var(--font-display);
+            font-size: 0.85rem; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+            padding: 8px 18px; border: 1px solid var(--border); border-radius: 4px;
+            background: var(--panel); color: var(--text); cursor: pointer; transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(0,200,255,0.15); }
+        .btn.primary { background: var(--accent2); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover { background: var(--accent); box-shadow: 0 0 16px rgba(0,200,255,0.4); }
+        .btn.active { border-color: var(--accent); color: var(--accent); }
+        main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
+        .controls {
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+            margin-bottom: 24px; padding: 16px 20px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+        }
+        .control-group { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; }
+        .control-label { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; }
+        select, input[type="text"] {
+            font-family: var(--font-mono); font-size: 0.8rem;
+            background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            padding: 7px 12px; border-radius: 4px; flex: 1; appearance: none; cursor: pointer; transition: border-color 0.2s;
+        }
+        select:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
+        input[type="text"]::placeholder { color: var(--text-dim); }
+        .refresh-ring { position: relative; width: 32px; height: 32px; flex-shrink: 0; }
+        .refresh-ring svg { transform: rotate(-90deg); }
+        .refresh-ring circle.track { fill: none; stroke: var(--border); stroke-width: 3; }
+        .refresh-ring circle.progress { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 82; stroke-dashoffset: 82; transition: stroke-dashoffset 1s linear; }
+        .refresh-ring .countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.6rem; color: var(--accent); }
+        .notif-btn { display: flex; align-items: center; gap: 6px; }
+        .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; text-align: center; transition: border-color 0.3s; }
+        .stat-card.has-alerts { border-color: currentColor; box-shadow: 0 0 12px rgba(255,255,255,0.05); }
+        .stat-count { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+        .stat-label { font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-family: var(--font-mono); }
+        .stat-card.extreme  { color: var(--extreme); }
+        .stat-card.severe   { color: var(--severe); }
+        .stat-card.moderate { color: var(--moderate); }
+        .stat-card.minor    { color: var(--minor); }
+        .stat-card.total    { color: var(--accent); }
+        #alerts-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+        .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-dim); font-family: var(--font-mono); font-size: 0.9rem; }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 12px; display: block; }
+        .alert-card {
+            background: var(--panel); border-radius: 8px; border: 1px solid var(--border);
+            border-left: 4px solid var(--unknown); padding: 16px;
+            transition: transform 0.2s, box-shadow 0.2s; animation: slideIn 0.3s ease; position: relative; overflow: hidden;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .alert-card::before { content: ''; position: absolute; top: 0; right: 0; width: 80px; height: 80px; border-radius: 50%; opacity: 0.04; background: currentColor; transform: translate(20px, -20px); }
+        .alert-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .alert-card.extreme  { border-left-color: var(--extreme);  color: var(--extreme); }
+        .alert-card.severe   { border-left-color: var(--severe);   color: var(--severe); }
+        .alert-card.moderate { border-left-color: var(--moderate); color: var(--moderate); }
+        .alert-card.minor    { border-left-color: var(--minor);    color: var(--minor); }
+        .alert-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+        .severity-badge { font-size: 0.62rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--font-mono); padding: 2px 8px; border-radius: 3px; border: 1px solid currentColor; background: rgba(0,0,0,0.3); white-space: nowrap; }
+        .alert-event { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; flex: 1; }
+        .alert-area { font-size: 0.78rem; color: var(--text-dim); font-family: var(--font-mono); margin-bottom: 8px; }
+        .alert-area strong { color: var(--text); }
+        .alert-headline { font-size: 0.82rem; color: var(--text); line-height: 1.5; }
+        .alert-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); }
+        #toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; }
+        .toast { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 6px; font-size: 0.82rem; max-width: 300px; animation: toastIn 0.3s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .toast.alert-toast { border-left-color: var(--extreme); }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        #last-updated { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim); text-align: right; margin-bottom: 12px; }
+        @media (max-width: 640px) {
+            header { padding: 12px 16px; flex-wrap: wrap; gap: 10px; }
+            main { padding: 16px; }
+            .stats-row { grid-template-columns: repeat(3, 1fr); }
+            #alerts-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">
+        <div class="logo-icon">⛈</div>
+        <div>
+            <h1>NWS DASH</h1>
+            <span>PENNSYLVANIA ALERT MONITOR</span>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="status-bar">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">IDLE</span>
+        </div>
+        <button class="btn notif-btn" id="notif-btn" onclick="toggleNotifications()">🔔 Alerts Off</button>
+        <button class="btn primary" onclick="fetchAlerts()">↻ Refresh</button>
+    </div>
+</header>
+
+<main>
+    <div class="controls">
+        <div class="control-group">
+            <span class="control-label">County</span>
+            <input type="text" id="county-filter" placeholder="e.g. Mercer, Allegheny..." oninput="applyFilter()">
+        </div>
+        <div class="control-group">
+            <span class="control-label">Severity</span>
+            <select id="severity-filter" onchange="applyFilter()">
+                <option value="">All Severities</option>
+                <option value="Extreme">Extreme</option>
+                <option value="Severe">Severe</option>
+                <option value="Moderate">Moderate</option>
+                <option value="Minor">Minor</option>
+            </select>
+        </div>
+        <div class="control-group" style="flex:0; gap:10px;">
+            <span class="control-label">Auto-Refresh</span>
+            <select id="refresh-interval" onchange="setRefreshInterval()">
+                <option value="0">Off</option>
+                <option value="60" selected>1 min</option>
+                <option value="300">5 min</option>
+                <option value="600">10 min</option>
+            </select>
+            <div class="refresh-ring" id="refresh-ring" title="Next refresh">
+                <svg width="32" height="32" viewBox="0 0 32 32">
+                    <circle class="track" cx="16" cy="16" r="13"/>
+                    <circle class="progress" id="ring-progress" cx="16" cy="16" r="13"/>
+                </svg>
+                <div class="countdown" id="ring-countdown">–</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card total"><div class="stat-count" id="stat-total">–</div><div class="stat-label">Total</div></div>
+        <div class="stat-card extreme"><div class="stat-count" id="stat-extreme">–</div><div class="stat-label">Extreme</div></div>
+        <div class="stat-card severe"><div class="stat-count" id="stat-severe">–</div><div class="stat-label">Severe</div></div>
+        <div class="stat-card moderate"><div class="stat-count" id="stat-moderate">–</div><div class="stat-label">Moderate</div></div>
+        <div class="stat-card minor"><div class="stat-count" id="stat-minor">–</div><div class="stat-label">Minor</div></div>
+    </div>
+
+    <div id="last-updated"></div>
+    <div id="alerts-container">
+        <div class="empty-state">
+            <span class="icon">📡</span>
+            Auto-fetch starting shortly...
+        </div>
+    </div>
+</main>
+
+<div id="toast-container"></div>
+
+<script>
+    let allAlerts = [];
+    let notificationsEnabled = false;
+    let notifiedIds = new Set();
+    let countdownTimer = null;
+    let countdownValue = 0;
+    let refreshIntervalSeconds = 60;
+    let isFirstLoad = true;
+
+    function getSeverityClass(severity) {
+        const s = (severity || '').toLowerCase();
+        if (s === 'extreme') return 'extreme';
+        if (s === 'severe') return 'severe';
+        if (s === 'moderate') return 'moderate';
+        if (s === 'minor') return 'minor';
+        return '';
+    }
+
+    async function fetchAlerts() {
+        setStatus('loading', 'FETCHING');
+        try {
+            const res = await fetch('https://api.weather.gov/alerts/active?area=PA');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            const newAlerts = data.features || [];
+            checkNewAlerts(newAlerts);
+            allAlerts = newAlerts;
+            setStatus('live', 'LIVE');
+            document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            applyFilter();
+            isFirstLoad = false;
+        } catch (e) {
+            setStatus('error', 'ERROR');
+            showToast('Failed to fetch alerts. Check connection.', true);
+            console.error(e);
+        }
+    }
+
+    function applyFilter() {
+        const countyQuery = document.getElementById('county-filter').value.trim().toLowerCase();
+        const severityQuery = document.getElementById('severity-filter').value;
+        let filtered = allAlerts.filter(a => {
+            const p = a.properties;
+            const matchCounty = !countyQuery || (p.areaDesc || '').toLowerCase().includes(countyQuery);
+            const matchSeverity = !severityQuery || (p.severity || '') === severityQuery;
+            return matchCounty && matchSeverity;
+        });
+        renderAlerts(filtered);
+        updateStats(filtered);
+    }
+
+    function renderAlerts(alerts) {
+        const container = document.getElementById('alerts-container');
+        if (alerts.length === 0) {
+            container.innerHTML = `<div class="empty-state"><span class="icon">☀️</span>No active alerts match your filters.</div>`;
+            return;
+        }
+        container.innerHTML = alerts.map(a => {
+            const p = a.properties;
+            const sc = getSeverityClass(p.severity);
+            const onset = p.onset ? new Date(p.onset).toLocaleString() : 'N/A';
+            const expires = p.expires ? new Date(p.expires).toLocaleString() : 'N/A';
+            return `
+            <div class="alert-card ${sc}">
+                <div class="alert-header">
+                    <div class="alert-event">${p.event || 'Weather Alert'}</div>
+                    <div class="severity-badge">${p.severity || 'Unknown'}</div>
+                </div>
+                <div class="alert-area"><strong>📍</strong> ${p.areaDesc || 'Area not specified'}</div>
+                <div class="alert-headline">${p.headline || (p.description || '').slice(0,160) || 'No details available.'}</div>
+                <div class="alert-footer">
+                    <span>🕐 ${onset}</span>
+                    <span>⏳ Exp: ${expires}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function updateStats(alerts) {
+        const counts = { extreme: 0, severe: 0, moderate: 0, minor: 0 };
+        alerts.forEach(a => {
+            const s = (a.properties.severity || '').toLowerCase();
+            if (counts[s] !== undefined) counts[s]++;
+        });
+        document.getElementById('stat-total').textContent = alerts.length;
+        ['extreme','severe','moderate','minor'].forEach(s => {
+            document.getElementById('stat-' + s).textContent = counts[s];
+            const card = document.querySelector('.stat-card.' + s);
+            card?.classList.toggle('has-alerts', counts[s] > 0);
+        });
+    }
+
+    function setStatus(state, label) {
+        document.getElementById('status-dot').className = 'status-dot ' + state;
+        document.getElementById('status-text').textContent = label;
+    }
+
+    async function toggleNotifications() {
+        if (!notificationsEnabled) {
+            if (!('Notification' in window)) { showToast('Notifications not supported.', false); return; }
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+                notificationsEnabled = true;
+                document.getElementById('notif-btn').textContent = '🔔 Alerts On';
+                document.getElementById('notif-btn').classList.add('active');
+                showToast('Push notifications enabled!');
+            } else {
+                showToast('Permission denied. Enable in browser settings.', true);
+            }
+        } else {
+            notificationsEnabled = false;
+            document.getElementById('notif-btn').textContent = '🔔 Alerts Off';
+            document.getElementById('notif-btn').classList.remove('active');
+            showToast('Notifications disabled.');
+        }
+    }
+
+    function checkNewAlerts(alerts) {
+        if (!notificationsEnabled || isFirstLoad) {
+            // On first load, just populate the known IDs so we don't spam
+            alerts.forEach(a => notifiedIds.add(a.properties.id));
+            return;
+        }
+        alerts.forEach(a => {
+            const id = a.properties.id;
+            if (!notifiedIds.has(id)) {
+                notifiedIds.add(id);
+                const p = a.properties;
+                new Notification('⚠️ NEW: ' + (p.event || 'Weather Alert'), {
+                    body: (p.headline || p.areaDesc || ''),
+                    icon: 'https://www.weather.gov/favicon.ico'
+                });
+                showToast('New alert: ' + (p.event || 'Weather Alert'), true);
+            }
+        });
+    }
+
+    function setRefreshInterval() {
+        clearInterval(countdownTimer);
+        refreshIntervalSeconds = parseInt(document.getElementById('refresh-interval').value);
+        const ring = document.getElementById('ring-progress');
+        const countdown = document.getElementById('ring-countdown');
+        const circumference = 82;
+
+        if (refreshIntervalSeconds === 0) {
+            ring.style.strokeDashoffset = circumference;
+            countdown.textContent = '–';
+            fetchAlerts();
+            return;
+        }
+
+        countdownValue = refreshIntervalSeconds;
+
+        function tick() {
+            countdownValue--;
+            const fraction = countdownValue / refreshIntervalSeconds;
+            ring.style.strokeDashoffset = circumference * fraction;
+            countdown.textContent = countdownValue > 59 ? Math.floor(countdownValue / 60) + 'm' : countdownValue + 's';
+            if (countdownValue <= 0) {
+                countdownValue = refreshIntervalSeconds;
+                fetchAlerts();
+            }
+        }
+
+        fetchAlerts();
+        countdownTimer = setInterval(tick, 1000);
+    }
+
+    function showToast(msg, isAlert = false) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast' + (isAlert ? ' alert-toast' : '');
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log('SW registered'))
+            .catch(err => console.error('SW failed:', err));
+    }
+
+    // Kick off on load
+    setRefreshInterval();
+</script>
+</body>
+</html>
