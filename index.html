@@ -95,10 +95,19 @@
             document.getElementById('status-text').style.color = "#f9e2af";
             
             try {
-                // CHANGED: Now fetching directly from the Cleveland Office (CLE)
-                const response = await fetch('https://api.weather.gov/alerts/active?wfo=CLE');
-                const data = await response.json();
-                allAlerts = data.features;
+                // 1. Ask for CLE and PBZ data at the exact same time
+                const cleResponse = fetch('https://api.weather.gov/alerts/active?wfo=CLE');
+                const pbzResponse = fetch('https://api.weather.gov/alerts/active?wfo=PBZ');
+                
+                // 2. Wait for BOTH servers to send the data back
+                const [cleData, pbzData] = await Promise.all([cleResponse, pbzResponse]);
+                
+                // 3. Convert both responses into JSON formatting
+                const cleJson = await cleData.json();
+                const pbzJson = await pbzData.json();
+                
+                // 4. Combine the alerts from both offices into one single list
+                allAlerts = [...cleJson.features, ...pbzJson.features];
                 
                 populateCounties();
                 renderAlerts();
@@ -110,7 +119,6 @@
                 document.getElementById('status-text').style.color = "#f38ba8";
             }
         }
-
         function populateCounties() {
             const countySelect = document.getElementById('county-filter');
             const currentSelection = countySelect.value;
