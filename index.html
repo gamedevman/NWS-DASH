@@ -95,19 +95,22 @@
             document.getElementById('status-text').style.color = "#f9e2af";
             
             try {
-                // 1. Ask for CLE and PBZ data at the exact same time
-                const cleResponse = fetch('https://api.weather.gov/alerts/active?wfo=CLE');
-                const pbzResponse = fetch('https://api.weather.gov/alerts/active?wfo=PBZ');
+                // THE FIX: We must search by state area (OH and PA), not by WFO code!
+                const ohResponse = fetch('https://api.weather.gov/alerts/active?area=OH');
+                const paResponse = fetch('https://api.weather.gov/alerts/active?area=PA');
                 
-                // 2. Wait for BOTH servers to send the data back
-                const [cleData, pbzData] = await Promise.all([cleResponse, pbzResponse]);
+                // Wait for BOTH servers to send the data back
+                const [ohData, paData] = await Promise.all([ohResponse, paResponse]);
                 
-                // 3. Convert both responses into JSON formatting
-                const cleJson = await cleData.json();
-                const pbzJson = await pbzData.json();
+                // Convert both responses into JSON formatting
+                const ohJson = await ohData.json();
+                const paJson = await paData.json();
                 
-                // 4. Combine the alerts from both offices into one single list
-                allAlerts = [...cleJson.features, ...pbzJson.features];
+                // Combine the alerts from both states into one single list
+                const combinedAlerts = [...ohJson.features, ...paJson.features];
+                
+                // Remove duplicates in case an alert covers counties in both OH and PA
+                allAlerts = Array.from(new Map(combinedAlerts.map(a => [a.properties.id, a])).values());
                 
                 populateCounties();
                 renderAlerts();
@@ -117,6 +120,7 @@
             } catch (error) {
                 document.getElementById('status-text').innerText = "ERROR";
                 document.getElementById('status-text').style.color = "#f38ba8";
+                console.error("Fetch Error:", error); // This prints the exact issue to your console for future bug hunting!
             }
         }
         function populateCounties() {
